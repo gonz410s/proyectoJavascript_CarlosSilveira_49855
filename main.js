@@ -72,7 +72,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 items.push({ id: id, name: itemName, price: price });
                 saveItemsToLocalStorage(items);
                 updateCartView();
-                swal("¡Producto agregado al carrito!", "", "success");
+                swal.fire("¡Producto agregado al carrito!", "", "success");
             });
         });
     }
@@ -104,7 +104,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const items = getItemsFromLocalStorage();
 
         if (items.length === 0) {
-            swal("Carrito vacío", "Agrega productos al carrito antes de pagar", "warning");
+            swal.fire("Carrito vacío", "Agrega productos al carrito antes de pagar", "warning");
             return;
         }
     
@@ -113,7 +113,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const customerPhone = document.getElementById('customer-phone').value;
     
         if (!customerName || !customerEmail || !customerPhone) {
-            swal("Datos del cliente incompletos", "Por favor, ingrese todos los datos del cliente", "warning");
+            swal.fire("Datos del cliente incompletos", "Por favor, ingrese todos los datos del cliente", "warning");
             return;
         }
     
@@ -127,19 +127,28 @@ document.addEventListener('DOMContentLoaded', () => {
             timestamp: new Date().toISOString()
         };
     
-
-    
-
-
-        saveInvoiceToDB(invoice);
-    
-        localStorage.removeItem('cartItems');
-    
-        updateCartView();
-    
-        const invoiceMessage = generateInvoiceMessage(invoice);
-        swal("¡Compra realizada!", invoiceMessage, "success");
+        swal.fire({
+            title: 'Confirmar compra',
+            text: '¿Estás seguro de que quieres proceder con el pago?',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#3085d6',
+            cancelButtonColor: '#d33',
+            confirmButtonText: 'Sí, pagar',
+            cancelButtonText: 'Cancelar'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // Proceder con el pago y guardar la factura
+                saveInvoiceToDB(invoice);
+                localStorage.removeItem('cartItems');
+                updateCartView();
+                const invoiceMessage = generateInvoiceMessage(invoice);
+                swal.fire("¡Compra realizada!", invoiceMessage, "success");
+            }
+        });
     });
+    
+
     
 
     searchButton.addEventListener('click', () => {
@@ -147,23 +156,24 @@ document.addEventListener('DOMContentLoaded', () => {
         if (query.trim() !== '') {
             searchInvoice(query);
         } else {
-            swal("Campo de búsqueda vacío", "Por favor, ingrese un nombre, correo electrónico o teléfono para buscar la factura", "warning");
+            swal.fire("Campo de búsqueda vacío", "Por favor, ingrese un nombre, correo electrónico o teléfono para buscar la factura", "warning");
         }
     });
 
     function generateInvoiceMessage(invoice) {
-        let message = "¡Compra realizada!\n\n";
-        message += "Factura:\n";
-        message += "Número de factura: " + invoice.id + "\n";
-        message += "Nombre: " + invoice.name + "\n";
-        message += "Correo electrónico: " + invoice.email + "\n";
-        message += "Teléfono: " + invoice.phone + "\n\n";
-        message += "Productos:\n";
+        let messageLines = [];
+        messageLines.push("<b>¡Compra realizada!</b>");
+        messageLines.push("<b>Factura:</b>");
+        messageLines.push("<b>Número de factura:</b> " + invoice.id);
+        messageLines.push("<b>Nombre:</b> " + invoice.name);
+        messageLines.push("<b>Correo electrónico:</b> " + invoice.email);
+        messageLines.push("<b>Teléfono:</b> " + invoice.phone);
+        messageLines.push("<b>Productos:</b>");
         invoice.items.forEach((item, index) => {
-            message += `${index + 1}. ${item.name} - $${item.price}\n`;
+            messageLines.push(`<b>${index + 1}.</b> ${item.name} - <b>$${item.price}</b>`);
         });
-        message += "\nTotal: $" + invoice.total;
-        return message;
+        messageLines.push("<b>Total:</b> $" + invoice.total);
+        return messageLines.join("<br>");
     }
 
     function saveInvoiceToDB(invoice) {
@@ -203,50 +213,54 @@ document.addEventListener('DOMContentLoaded', () => {
     function searchInvoice(query) {
         const transaction = db.transaction(['invoices'], 'readonly');
         const objectStore = transaction.objectStore('invoices');
+    
+        // No es necesario utilizar toLowerCase() en los índices del objectStore
+    
         const indexName = objectStore.index('name');
         const indexEmail = objectStore.index('email');
         const indexPhone = objectStore.index('phone');
-
-        const requestName = indexName.getAll(query);
-        const requestEmail = indexEmail.getAll(query);
-        const requestPhone = indexPhone.getAll(query);
-
+    
+        const requestName = indexName.getAll(query.toLowerCase()); // Convertir query a minúsculas
+        const requestEmail = indexEmail.getAll(query.toLowerCase()); // Convertir query a minúsculas
+        const requestPhone = indexPhone.getAll(query.toLowerCase()); // Convertir query a minúsculas
+    
         let invoices = [];
-
+    
         requestName.onsuccess = function(event) {
             invoices = invoices.concat(event.target.result);
         };
-
+    
         requestEmail.onsuccess = function(event) {
             invoices = invoices.concat(event.target.result);
         };
-
+    
         requestPhone.onsuccess = function(event) {
             invoices = invoices.concat(event.target.result);
         };
-
+    
         transaction.oncomplete = function() {
             if (invoices.length > 0) {
-                showInvoice(invoices);
+                const message = showInvoice(invoices); 
+                swal.fire("Facturas encontradas", message, "success");
             } else {
-                swal("Factura no encontrada", "No se encontraron facturas para el criterio de búsqueda proporcionado", "warning");
+                swal.fire("Factura no encontrada", "No se encontraron facturas para el criterio de búsqueda proporcionado", "warning");
             }
         };
     }
 
     function showInvoice(invoices) {
-        let message = "Facturas encontradas:\n\n";
+        let messageLines = [];
+        messageLines.push("<b>Facturas encontradas:</b><br><br>");
         invoices.forEach((invoice, index) => {
-            message += `Factura ${index + 1}:\n`;
-            message += `Número de factura: ${invoice.id}\n`;
-            message += `Nombre: ${invoice.name}\n`;
-            message += `Correo electrónico: ${invoice.email}\n`;
-            message += `Teléfono: ${invoice.phone}\n`;
-            message += `Total: $${invoice.total}\n`;
-            message += `Fecha: ${invoice.timestamp}\n\n`;
+            messageLines.push(`<b>Factura ${index + 1}:</b>`);
+            messageLines.push(`<b>Número de factura:</b> ${invoice.id}`);
+            messageLines.push(`<b>Nombre:</b> ${invoice.name}`);
+            messageLines.push(`<b>Correo electrónico:</b> ${invoice.email}`);
+            messageLines.push(`<b>Teléfono:</b> ${invoice.phone}`);
+            messageLines.push(`<b>Total:</b> $${invoice.total}`);
+            messageLines.push(`<b>Fecha:</b> ${invoice.timestamp}<br>`);
         });
-
-        swal("Facturas encontradas", message, "success");
+        return messageLines.join("<br>");
     }
 
     fetchProducts();
